@@ -171,7 +171,7 @@ def readInput():
             'name': clust[0], 'cent_ra': float(ra),
             'cent_dec': float(dec), 'box_s': box_s})
 
-    return cat, mag_name, mag_max, colors, clusters
+    return cat, mag_name, mag_max, columns, colors, clusters
 
 
 if __name__ == '__main__':
@@ -180,4 +180,7 @@ if __name__ == '__main__':
     # catalogs = Vizier.get_catalogs(catalog_list.keys())
     # print(catalogs)
 
+    # Generate output dir if it doesn't exist.
+    if not exists('out'):
+        makedirs('out')
     main()
