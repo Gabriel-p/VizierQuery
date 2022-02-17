@@ -1,4 +1,6 @@
 
+from os.path import exists
+from os import makedirs
 import configparser
 import numpy as np
 import astropy.coordinates as coord
@@ -9,7 +11,7 @@ from uncertainties import ufloat
 from uncertainties import unumpy as unp
 
 
-__version__ = '1.0'
+__version__ = '1.1'
 
 
 def main():
@@ -20,7 +22,7 @@ def main():
     print(" VizierQuery v{}".format(__version__))
     print("*******************")
 
-    cat, mag_name, mag_max, colors, clusters = readInput()
+    cat, mag_name, mag_max, columns, colors, clusters = readInput()
 
     # Gaia DR2
     if cat == 'I/345/gaia2':
@@ -35,7 +37,7 @@ def main():
         center, box_s = (clust['cent_ra'], clust['cent_dec']), clust['box_s']
 
         data = getData(
-            cat, mag_name, mag_max, clust['name'], center, box_s)
+            cat, mag_name, mag_max, columns, clust['name'], center, box_s)
 
         N_old = len(data)
         print("{} data read, {} sources".format(clust['name'], N_old))
@@ -45,19 +47,19 @@ def main():
             data = uncertMags(DR, data, colors)
 
         print("Write output file")
-        ascii.write(data, clust['name'] + ".dat", overwrite=True)
+        ascii.write(data, 'out/' + clust['name'] + ".dat", overwrite=True)
 
     print("\nEnd")
 
 
-def getData(cat, mag_name, mag_max, name, center, box_s):
+def getData(cat, mag_name, mag_max, columns, name, center, box_s):
     """
     Download data using astroquery.
     """
     print("\nDownloading data for {}, from '{}'".format(name, cat))
     print("  {} < {}".format(mag_name, mag_max))
-    # Unlimited rows, all columns
-    v = Vizier(row_limit=-1, columns=['all'])
+    # Unlimited rows, selected columns
+    v = Vizier(row_limit=-1, columns=columns)
 
     result = v.query_region(coord.SkyCoord(
         ra=center[0], dec=center[1], unit=(u.deg, u.deg), frame='icrs'),
@@ -154,8 +156,10 @@ def readInput():
     in_params.read('params.ini')
 
     pars = in_params['Parameters']
-    cat, mag_name, mag_max = pars['cat'], pars['mag_name'],\
-        pars.getfloat('mag_max')
+    cat, mag_name, mag_max, columns = pars['cat'], pars['mag_name'],\
+        pars.getfloat('mag_max'), pars['columns']
+
+    columns = columns.split()
 
     cols_data = in_params.items("Colors")
     colors = []
