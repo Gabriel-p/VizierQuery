@@ -11,7 +11,7 @@ from uncertainties import ufloat
 from uncertainties import unumpy as unp
 
 
-__version__ = '1.1'
+__version__ = '1.2'
 
 
 def main():
@@ -27,17 +27,18 @@ def main():
     # Gaia DR2
     if cat == 'I/345/gaia2':
         DR = '2'
-    # Gaia EDR3
-    elif cat == 'I/350/gaiaedr3':
+    # Gaia EDR3/DR3
+    elif cat in ('I/350/gaiaedr3', 'I/355/gaiadr3'):
         DR = '3'
     else:
         DR = None
 
     for clust in clusters:
-        center, box_s = (clust['cent_ra'], clust['cent_dec']), clust['box_s']
+        frame, center, box_s = clust['frame'],\
+            (clust['cent_x'], clust['cent_y']), clust['box_s']
 
-        data = getData(
-            cat, mag_name, mag_max, columns, clust['name'], center, box_s)
+        data = getData(cat, mag_name, mag_max, columns, clust['name'], frame,
+                       center, box_s)
 
         N_old = len(data)
         print("{} data read, {} sources".format(clust['name'], N_old))
@@ -47,24 +48,36 @@ def main():
             data = uncertMags(DR, data, colors)
 
         print("Write output file")
-        ascii.write(data, 'out/' + clust['name'] + ".dat", overwrite=True)
+        ascii.write(data, 'out/' + clust['name'] + ".dat", overwrite=True,
+                    format='csv')
 
     print("\nEnd")
 
 
-def getData(cat, mag_name, mag_max, columns, name, center, box_s):
+def getData(cat, mag_name, mag_max, columns, name, frame, center, box_s):
     """
     Download data using astroquery.
+
+    frame : icrs / galactic
     """
     print("\nDownloading data for {}, from '{}'".format(name, cat))
     print("  {} < {}".format(mag_name, mag_max))
     # Unlimited rows, selected columns
     v = Vizier(row_limit=-1, columns=columns)
 
-    result = v.query_region(coord.SkyCoord(
-        ra=center[0], dec=center[1], unit=(u.deg, u.deg), frame='icrs'),
-        width=box_s, catalog=[cat],
-        column_filters={mag_name: '<{}'.format(mag_max)})
+    if frame == 'icrs':
+        result = v.query_region(coord.SkyCoord(
+            ra=center[0], dec=center[1], unit=(u.deg, u.deg), frame=frame),
+            width=box_s, catalog=[cat],
+            column_filters={mag_name: '<{}'.format(mag_max)}, frame=frame)
+    elif frame == 'galactic':
+        result = v.query_region(coord.SkyCoord(
+            l=center[0], b=center[1], unit=(u.deg, u.deg), frame=frame),
+            width=box_s, catalog=[cat],
+            column_filters={mag_name: '<{}'.format(mag_max)}, frame=frame)
+    else:
+        raise ValueError(f"Unrecognized frame: {frame}")
+
     data = result[cat]
 
     return data
@@ -153,7 +166,11 @@ def readInput():
     Read 'params.ini' data file.
     """
     in_params = configparser.ConfigParser()
-    in_params.read('params.ini')
+
+    if exists('params_norepo.ini'):
+        in_params.read('params_norepo.ini')
+    else:
+        in_params.read('params.ini')
 
     pars = in_params['Parameters']
     cat, mag_name, mag_max, columns = pars['cat'], pars['mag_name'],\
@@ -170,10 +187,10 @@ def readInput():
     clust_data = in_params.items("Clusters")
     clusters = []
     for clust in clust_data:
-        ra, dec, box_s = clust[1].split()
+        frame, xc, yc, box_s = clust[1].split()
         clusters.append({
-            'name': clust[0], 'cent_ra': float(ra),
-            'cent_dec': float(dec), 'box_s': box_s})
+            'name': clust[0], 'frame': frame, 'cent_x': float(xc),
+            'cent_y': float(yc), 'box_s': box_s})
 
     return cat, mag_name, mag_max, columns, colors, clusters
 
